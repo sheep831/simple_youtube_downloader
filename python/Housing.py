@@ -85,4 +85,29 @@ for set_ in (strat_train_set, strat_test_set): # remove the income_cat attribute
 
 housing = strat_train_set.copy() # make a copy of training set
 
-housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.1)
+# A visualization highlighting high-density areas
+# housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.1)
+
+# A better visualization
+housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.4,
+ s=housing["population"]/100, label="population", figsize=(10,7),
+ c="median_house_value", cmap=plt.get_cmap("jet"), colorbar=True,
+)
+# add a legend to a plot
+plt.legend()
+
+# plt.show()
+# we can spot the pattern through the visualization, the housing prices are very much related to the location and population density
+
+#======================================================================================================================================
+# Looking for Correlations
+
+# Select only numeric columns from the housing DataFrame
+numeric_columns = housing.select_dtypes(include=[np.number])
+
+# Compute the correlation matrix for numeric columns
+corr_matrix = numeric_columns.corr()
+
+# get the correlation between median_house_value and other attributes
+print(corr_matrix["median_house_value"].sort_values(ascending=False))
+
