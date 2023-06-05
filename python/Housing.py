@@ -1,6 +1,7 @@
 import os
 import tarfile
 import pandas as pd
+from pandas.plotting import scatter_matrix
 from six.moves import urllib
 import matplotlib.pyplot as plt
 from zlib import crc32
@@ -35,7 +36,7 @@ def load_housing_data(housing_path=HOUSING_PATH):
 
 housing = load_housing_data()
 # print(housing.head())
-# print(housing.info()) # get the attributes of the data, no of instances
+# print(housing.info()) # get the attributes of the data, no of instances, total_bedrooms has some missing values
 # print(housing["ocean_proximity"].value_counts()) # how many districts belong to each category
 # print(housing.describe())
 
@@ -94,7 +95,7 @@ housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.4,
  c="median_house_value", cmap=plt.get_cmap("jet"), colorbar=True,
 )
 # add a legend to a plot
-plt.legend()
+# plt.legend()
 
 # plt.show()
 # we can spot the pattern through the visualization, the housing prices are very much related to the location and population density
@@ -105,9 +106,92 @@ plt.legend()
 # Select only numeric columns from the housing DataFrame
 numeric_columns = housing.select_dtypes(include=[np.number])
 
-# Compute the correlation matrix for numeric columns
+# Compute the correlation matrix for numeric columns, only linear s (“if x goes up, then y generally goes up/down”)
+# -1:negative correlation, 1: positive correlation, 0: no correlation
 corr_matrix = numeric_columns.corr()
 
 # get the correlation between median_house_value and other attributes
-print(corr_matrix["median_house_value"].sort_values(ascending=False))
+# print(corr_matrix["median_house_value"].sort_values(ascending=False))
 
+# Another way to check for correlation between attributes is to use Pandas’ scatter_matrix function
+# 佢會將每個attribute同每一個其他attribute之間嘅關係畫出嚟, 4個attributes就4x4=16個圖
+attributes = ["median_house_value", "median_income", "total_rooms", "housing_median_age"]
+scatter_matrix(housing[attributes], figsize=(12, 8))
+
+#======================================================================================================================================
+# try out various attribute combinations
+
+# create new attributes and check the correlation between them and median_house_value
+housing["rooms_per_household"] = housing["total_rooms"]/housing["households"]
+housing["bedrooms_per_room"] = housing["total_bedrooms"]/housing["total_rooms"]
+housing["population_per_household"]=housing["population"]/housing["households"]
+
+numeric_columns = housing.select_dtypes(include=[np.number])
+corr_matrix = numeric_columns.corr()
+# print(corr_matrix["median_house_value"].sort_values(ascending=False))
+
+#======================================================================================================================================
+# prepare data for ML algorithms
+# write functions to do this part !!!
+
+# drop the labels for training set, drop() creates a copy of the data and does not affect strat_train_set
+housing = strat_train_set.drop("median_house_value", axis=1)
+housing_labels = strat_train_set["median_house_value"].copy()
+
+"""
+fix missing features of total_bedrooms
+• option 1 : Remove the districts with missing values.
+• option 2 : Remove the whole attribute.
+• option 3 : Fill the missing values to some value (zero, the mean, the median, etc.)
+• option 4 : Use sklearn imputer
+"""
+# option 1
+housing.dropna(subset=["total_bedrooms"], inplace=True)
+
+# option 2
+housing.drop("total_bedrooms", axis=1)
+
+# option 3
+median = housing["total_bedrooms"].median() 
+# fill missing values with median, directly modify the original data without creating a new DataFrame
+housing["total_bedrooms"].fillna(median, inplace=True)
+
+# option 4
+from sklearn.impute import SimpleImputer
+imputer = SimpleImputer(strategy="median") # create a SimpleImputer instance, strategy: the value to replace missing values
+housing_num = housing.drop("ocean_proximity", axis=1) # drop走d有字既attribute
+imputer.fit(housing_num) # 將imputer做好, 佢會將每個attribute嘅median存到佢個statistics_ attribute入面
+"""
+The imputer has simply computed the median of each attribute and stored the result in its 
+statistics_ instance variable.
+
+print("imputer.statistics_", imputer.statistics_)
+print("housing_num.median().values", housing_num.median().values)
+both are the same
+"""
+
+X = imputer.transform(housing_num) # 將missing values用median填補, return a numpy array
+housing_tr = pd.DataFrame(X, columns=housing_num.columns) # convert numpy array to pandas DataFrame
+
+# print(housing_tr.info())
+
+# ----------------------------------------------
+# convert text categories to numbers
+housing_cat = housing[["ocean_proximity"]]
+housing_cat.head(10)
+
+from sklearn.preprocessing import OrdinalEncoder
+ordinal_encoder = OrdinalEncoder()
+housing_cat_encoded = ordinal_encoder.fit_transform(housing_cat)
+# ordinal_encoder.categories_ is a list of categories
+# print(ordinal_encoder.categories_)
+
+"""
+convert text categories to one-hot vectors so that the categories are in a format that can be understood by these algorithms
+not useful in large categories (such as country codes, professions), 
+replace them with meaningful data such as a country code could be replaced with the country’s population or GDP per capita
+"""
+from sklearn.preprocessing import OneHotEncoder
+cat_encoder = OneHotEncoder()
+housing_cat_1hot = cat_encoder.fit_transform(housing_cat) # output is a SciPy sparse matrix
+# print(cat_encoder.categories_) # get the list of categories

@@ -1,5 +1,11 @@
-import numpy as np
+import pandas as pd
 
-a = np.array([1, 2, 3, 4, 5, 6])
+# Create a DataFrame with missing values
+data = {'A': [1, None, 3, 4], 'B': [5, 6, None, 8]}
+df = pd.DataFrame(data)
 
-print(type(a))
+# Drop rows with missing values in-place
+df.dropna(inplace=True)
+
+# The original DataFrame is modified
+print(df)
