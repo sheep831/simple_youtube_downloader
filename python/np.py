@@ -1,11 +1,18 @@
-import pandas as pd
+def find_anagrams(word, candidates):
+    result = []
+    word = list(word.lower())
+    word_transform = sorted(word)
+    for candidate in candidates:
+        if word == list(candidate.lower()):
+            continue
+        candidate_transform = list(candidate.lower())
+        candidate_transform.sort()
+        if candidate_transform == word_transform:
+            result.append(candidate)
+    return result
 
-# Create a DataFrame with missing values
-data = {'A': [1, None, 3, 4], 'B': [5, 6, None, 8]}
-df = pd.DataFrame(data)
 
-# Drop rows with missing values in-place
-df.dropna(inplace=True)
 
-# The original DataFrame is modified
-print(df)
+
+candidates = ["Banana"]
+print(find_anagrams("BANANA", candidates))

@@ -131,8 +131,9 @@ corr_matrix = numeric_columns.corr()
 # print(corr_matrix["median_house_value"].sort_values(ascending=False))
 
 #======================================================================================================================================
-# prepare data for ML algorithms
+# prepare and preprocess data for ML algorithms
 # write functions to do this part !!!
+# 1. Data Cleaning
 
 # drop the labels for training set, drop() creates a copy of the data and does not affect strat_train_set
 housing = strat_train_set.drop("median_house_value", axis=1)
@@ -176,7 +177,9 @@ housing_tr = pd.DataFrame(X, columns=housing_num.columns) # convert numpy array 
 # print(housing_tr.info())
 
 # ----------------------------------------------
-# convert text categories to numbers
+# convert text categories to numbers (categorial variable encoding)
+# 2. Handling Text and Categorical Attributes
+
 housing_cat = housing[["ocean_proximity"]]
 housing_cat.head(10)
 
@@ -195,3 +198,83 @@ from sklearn.preprocessing import OneHotEncoder
 cat_encoder = OneHotEncoder()
 housing_cat_1hot = cat_encoder.fit_transform(housing_cat) # output is a SciPy sparse matrix
 # print(cat_encoder.categories_) # get the list of categories
+
+# ----------------------------------------------
+# custom transformer class
+# 3. Custom Transformers
+"""
+transformers are objects used to preprocess or transform data before feeding it into a machine learning model.
+-use to encapsulate data transformation logic
+-use for feature engineering, data cleaning, scaling, encoding, etc
+
+Below transformer,  add extra attributes to the data
+
+TransformerMixin is a base class for all transformers in scikit-learn,
+it provides fit() and transform() methods.
+fit() - performs any necessary computations or setup based on the training data
+transform() - applies the transformation to the input data
+"""
+from sklearn.base import BaseEstimator, TransformerMixin
+
+rooms_ix, bedrooms_ix, population_ix, households_ix = 3, 4, 5, 6
+
+class CombinedAttributesAdder(BaseEstimator, TransformerMixin):
+    # __init__ is the constructor
+    # hyperparameter: add_bedrooms_per_room, determine whether to add the bedrooms_per_room attribute or not
+    # = False就即係唔用 add_bedrooms_per_room
+    def __init__(self, add_bedrooms_per_room = True):
+        self.add_bedrooms_per_room = add_bedrooms_per_room
+
+    # does nothing and returns self, Python既self即係this, 即個instance
+    def fit(self, X, y=None):
+        return self
+    
+    # X is the input dataset, y is the labels
+    def transform(self, X, y=None):
+        rooms_per_household = X[:, rooms_ix] / X[:, households_ix]
+        population_per_household = X[:, population_ix] / X[:, households_ix]
+        if self.add_bedrooms_per_room:
+            bedrooms_per_room = X[:, bedrooms_ix] / X[:, rooms_ix]
+            return np.c_[X, rooms_per_household, population_per_household,
+            bedrooms_per_room]
+        else:
+            return np.c_[X, rooms_per_household, population_per_household]
+        
+attr_adder = CombinedAttributesAdder(add_bedrooms_per_room=False)
+housing_extra_attribs = attr_adder.transform(housing.values)
+
+# ----------------------------------------------
+# transformation pipeline
+"""
+- gathers and integrates various preprocessing methods and steps to prepare and preprocess the data before it is used for training a machine learning model
+- can easily apply the same set of preprocessing steps to new data during inference or testing
+- the steps could include 
+1. data cleaning (handling missing values, removing outliers)
+2. feature scaling (normalizing or standardizing numerical features)
+3. feature encoding (OneHotEncoder or OrdinalEncoder for categorical features)
+4. feature selection (selecting relevant features)
+"""
+# 處理numerical attributes
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+num_pipeline = Pipeline([
+ ('imputer', SimpleImputer(strategy="median")),
+ ('attribs_adder', CombinedAttributesAdder()),
+ ('std_scaler', StandardScaler()), # last estimator must be a transformer
+ ])
+
+# it calls fit_transform() sequentially on all transformers 總之一條龍做哂所有野
+housing_num_tr = num_pipeline.fit_transform(housing_num) 
+
+
+
+# 處理numerical + text attributes
+from sklearn.compose import ColumnTransformer
+num_attribs = list(housing_num) # list of numerical attributes names (無ocean_proximity)
+cat_attribs = ["ocean_proximity"]
+full_pipeline = ColumnTransformer([
+ ("num", num_pipeline, num_attribs),
+ ("cat", OneHotEncoder(), cat_attribs),
+ ])
+housing_prepared = full_pipeline.fit_transform(housing)
+
