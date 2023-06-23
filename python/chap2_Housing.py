@@ -1,12 +1,9 @@
 import os
 import tarfile
 import pandas as pd
-from pandas.plotting import scatter_matrix
 from six.moves import urllib
 import matplotlib.pyplot as plt
-from zlib import crc32
 import numpy as np
-from sklearn.model_selection import StratifiedShuffleSplit
 
 #======================================================================================================================================
 # Get the data
@@ -45,6 +42,7 @@ housing = load_housing_data()
 
 #======================================================================================================================================
 # Create a Test Set
+from zlib import crc32
 
 def test_set_check(identifier, test_ratio): # hash the identifier and check if it is less than the test_ratio
  return crc32(np.int64(identifier)) & 0xffffffff < test_ratio * 2**32
@@ -71,6 +69,8 @@ bins=[0., 1.5, 3.0, 4.5, 6., np.inf],
 labels=[1, 2, 3, 4, 5])
 
 # print(housing["income_cat"].value_counts() / len(housing)) # get the stratified categories and corresponding percentages in the whole dataset
+
+from sklearn.model_selection import StratifiedShuffleSplit
 
 split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
 for train_index, test_index in split.split(housing, housing["income_cat"]):
@@ -114,7 +114,9 @@ corr_matrix = numeric_columns.corr()
 # print(corr_matrix["median_house_value"].sort_values(ascending=False))
 
 # Another way to check for correlation between attributes is to use Pandas’ scatter_matrix function
-# 佢會將每個attribute同每一個其他attribute之間嘅關係畫出嚟, 4個attributes就4x4=16個圖
+# 佢會將每個attribute同每一個其他attribute之間嘅關係畫出嚟, 4個attributes就4x4=16個圖from pandas.plotting import scatter_matrix
+from pandas.plotting import scatter_matrix
+
 attributes = ["median_house_value", "median_income", "total_rooms", "housing_median_age"]
 scatter_matrix(housing[attributes], figsize=(12, 8))
 
@@ -147,21 +149,21 @@ fix missing features of total_bedrooms
 • option 4 : Use sklearn imputer
 """
 # option 1
-housing.dropna(subset=["total_bedrooms"], inplace=True)
+# housing.dropna(subset=["total_bedrooms"], inplace=True)
 
 # option 2
-housing.drop("total_bedrooms", axis=1)
+# housing.drop("total_bedrooms", axis=1)
 
 # option 3
-median = housing["total_bedrooms"].median() 
+# median = housing["total_bedrooms"].median() 
 # fill missing values with median, directly modify the original data without creating a new DataFrame
-housing["total_bedrooms"].fillna(median, inplace=True)
+# housing["total_bedrooms"].fillna(median, inplace=True)
 
 # option 4
 from sklearn.impute import SimpleImputer
 imputer = SimpleImputer(strategy="median") # create a SimpleImputer instance, strategy: the value to replace missing values
 housing_num = housing.drop("ocean_proximity", axis=1) # drop走d有字既attribute
-imputer.fit(housing_num) # 將imputer做好, 佢會將每個attribute嘅median存到佢個statistics_ attribute入面
+imputer.fit(housing_num) # 將imputer(估計器)做好, 佢會將每個attribute嘅median存到佢個statistics_ attribute入面
 """
 The imputer has simply computed the median of each attribute and stored the result in its 
 statistics_ instance variable.
@@ -181,11 +183,10 @@ housing_tr = pd.DataFrame(X, columns=housing_num.columns) # convert numpy array 
 # 2. Handling Text and Categorical Attributes
 
 housing_cat = housing[["ocean_proximity"]]
-housing_cat.head(10)
 
 from sklearn.preprocessing import OrdinalEncoder
-ordinal_encoder = OrdinalEncoder()
-housing_cat_encoded = ordinal_encoder.fit_transform(housing_cat)
+# ordinal_encoder = OrdinalEncoder()
+# housing_cat_encoded = ordinal_encoder.fit_transform(housing_cat)
 # ordinal_encoder.categories_ is a list of categories
 # print(ordinal_encoder.categories_)
 
@@ -254,6 +255,7 @@ housing_extra_attribs = attr_adder.transform(housing.values)
 3. feature encoding (OneHotEncoder or OrdinalEncoder for categorical features)
 4. feature selection (selecting relevant features)
 """
+
 # 處理numerical attributes
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -266,9 +268,8 @@ num_pipeline = Pipeline([
 # it calls fit_transform() sequentially on all transformers 總之一條龍做哂所有野
 housing_num_tr = num_pipeline.fit_transform(housing_num) 
 
-
-
 # 處理numerical + text attributes
+# ColumnTransformer used for performing different transformation to different columns
 from sklearn.compose import ColumnTransformer
 num_attribs = list(housing_num) # list of numerical attributes names (無ocean_proximity)
 cat_attribs = ["ocean_proximity"]
@@ -276,5 +277,148 @@ full_pipeline = ColumnTransformer([
  ("num", num_pipeline, num_attribs),
  ("cat", OneHotEncoder(), cat_attribs),
  ])
+
+# use fit_transform() during training phase
 housing_prepared = full_pipeline.fit_transform(housing)
 
+#======================================================================================================================================
+# Select a model to train
+
+from sklearn.linear_model import LinearRegression 
+
+lin_reg = LinearRegression()
+lin_reg.fit(housing_prepared, housing_labels) # fit the prepared data and the corresponding labels
+
+some_data = housing.iloc[:5] 
+some_labels = housing_labels.iloc[:5] 
+some_data_prepared = full_pipeline.transform(some_data) 
+# print("Predictions:", lin_reg.predict(some_data_prepared)) # Predictions: [210644.6045  317768.8069  210956.4333  59218.9888  189747.5584] 
+# print("Labels:", list(some_labels)) # Labels: [286600.0, 340600.0, 196900.0, 46300.0, 254500.0]
+
+# measure the root-mean squared error => typical prediction error
+from sklearn.metrics import mean_squared_error 
+housing_predictions = lin_reg.predict(housing_prepared) 
+lin_mse = mean_squared_error(housing_labels, housing_predictions) 
+lin_rmse = np.sqrt(lin_mse) # Prediction error is $686xx, underfitting. 1.select a powerful model 2. better data(features) 3. reduce constraints
+
+# ----------------------------------------------
+# Train with another model (in this case, DecisionTreeRegressor and RandomForestRegressor)
+
+# Train with DecisionTreeRegressor
+from sklearn.tree import DecisionTreeRegressor
+
+tree_reg = DecisionTreeRegressor(random_state=42)
+tree_reg.fit(housing_prepared, housing_labels)
+
+housing_predictions = tree_reg.predict(housing_prepared)
+tree_mse = mean_squared_error(housing_labels, housing_predictions)
+tree_rmse = np.sqrt(tree_mse) # error is 0.0, overfitting
+
+# Use Cross Validation to split the training set into a smaller training set and a validation set
+"""
+Scikit-Learn’s K-fold cross-validation
+- Cross-validation is a resampling technique that allows you to assess the performance of a model
+- randomly splits the training set into 10 distinct subsets called folds
+- trains and evaluates the Decision Tree model 10 times, picking a different fold for evaluation every time and training on the other 9 folds
+"""
+from sklearn.model_selection import cross_val_score
+
+tree_scores = cross_val_score(tree_reg, housing_prepared, housing_labels,
+                         scoring="neg_mean_squared_error", cv=10)
+tree_rmse_scores = np.sqrt(-tree_scores) # scores are the opposite of MSE, need to make it +ve before sqrt
+
+def display_cv_scores(scores):
+    print("Score:", scores)
+    print('Mean:', scores.mean())
+    print('Standard deviation:', scores.std())
+
+# display_cv_scores(tree_rmse_scores)
+
+# try the cross-validation results for linear regression
+linreg_scores = cross_val_score(lin_reg, housing_prepared, housing_labels,
+                                scoring="neg_mean_squared_error", cv=10)
+linreg_rmse_cv = np.sqrt(-linreg_scores)
+# display_cv_scores(linreg_rmse_cv)
+
+# ----------------------------------
+# Train with RandomForestRegressor
+# the rmse and SD of this model is the lowest !
+from sklearn.ensemble import RandomForestRegressor
+forest_reg = RandomForestRegressor()
+forest_reg.fit(housing_prepared, housing_labels)
+
+housing_predictions = forest_reg.predict(housing_prepared)
+forest_mse = mean_squared_error(housing_labels, housing_predictions)
+forest_rmse = np.sqrt(forest_mse)
+# print("forest_rmse", forest_rmse) 
+
+# forest_scores = cross_val_score(forest_reg, housing_prepared, housing_labels,
+#                                scoring="neg_mean_squared_error", cv=10)
+# forest_rmse_scores=np.sqrt(-forest_scores)
+# display_cv_scores(forest_rmse_scores)
+
+#======================================================================================================================================
+# Fine-Tune your model
+# 1. tune (find the best) hyperparameters with GridSearchCV
+# if data is massive, use randomized search (evaluates a given number of random combinations) instead of grid search
+from sklearn.model_selection import GridSearchCV
+param_grid = [
+    # try 12 (3×4) combinations of hyperparameters
+    {'n_estimators': [3, 10, 30], 'max_features': [2, 4, 6, 8]},
+    # then try 6 (2×3) combinations with bootstrap set as False, total 12 + 6 = 18 combinations
+    {'bootstrap': [False], 'n_estimators': [3, 10], 'max_features': [2, 3, 4]},
+  ]
+forest_reg = RandomForestRegressor(random_state=42)
+# train across 5 folds, that's a total of (12+6)*5=90 rounds of training 
+grid_search = GridSearchCV(forest_reg, param_grid, cv=5,
+                           scoring='neg_mean_squared_error',
+                           return_train_score=True)
+grid_search.fit(housing_prepared, housing_labels)
+
+# determine the best configuration {'max_features': 8, 'n_estimators': 30}, it will find the configuration with lowest rmse
+# the rmse is 49682, which is slightly less than the one not yet tuned (50182, ie the avg of rmse)
+# print(grid_search.best_params_) 
+# print(grid_search.best_estimator_) # best model or estimator found during the grid search
+
+# ----------------------------------------------
+# 2. Then figure out the importance of each attribute
+feature_importances = grid_search.best_estimator_.feature_importances_
+
+extra_attribs = ["rooms_per_hhold", "pop_per_hhold", "bedrooms_per_room"]
+cat_encoder = full_pipeline.named_transformers_["cat"]
+cat_one_hot_attribs = list(cat_encoder.categories_[0])
+attributes = num_attribs + extra_attribs + cat_one_hot_attribs
+
+# 'median_income' has highest score, and only 'INLAND' of 'ocean proximity' has significant score, so we can drop others
+# print(sorted(zip(feature_importances, attributes), reverse=True))
+
+#======================================================================================================================================
+# Evaluate Your Model on the Test Set
+
+final_model = grid_search.best_estimator_
+X_test = strat_test_set.drop("median_house_value", axis=1) # input of test set
+y_test = strat_test_set["median_house_value"].copy() # labels of test set
+
+# use transform() for applying the pipeline to new, unseen data
+X_test_prepared = full_pipeline.transform(X_test)
+final_predictions = final_model.predict(X_test_prepared)
+final_mse = mean_squared_error(y_test, final_predictions)
+final_rmse = np.sqrt(final_mse) # find the rmse, it is 47730
+
+# Computing 95% confidence interval
+# 95% 信心肯定個rmse係within呢個range, $4000 gap可以接受 
+from scipy import stats
+confidence = 0.95
+squared_errors = (final_predictions - y_test) ** 2
+np.sqrt(stats.t.interval(confidence, len(squared_errors) - 1,
+                         loc=squared_errors.mean(),
+                         scale=stats.sem(squared_errors)))
+# [45893.36082829 49774.46796717]
+
+"""
+Points to note
+- monitor code to check your system’s live performance at regular intervals
+- catch performance degradation
+- evaluate the system’s input data quality
+- train your models on a regular basis using fresh data (automatically or every 6 months)
+"""
