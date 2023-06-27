@@ -1,12 +1,12 @@
 import os
 import tarfile
 import pandas as pd
-from six.moves import urllib
 import matplotlib.pyplot as plt
 import numpy as np
 
 #======================================================================================================================================
 # Get the data
+from six.moves import urllib
 
 DOWNLOAD_ROOT = "https://raw.githubusercontent.com/ageron/handson-ml2/master/"
 HOUSING_PATH = os.path.join("datasets", "housing") # datasets\housing
